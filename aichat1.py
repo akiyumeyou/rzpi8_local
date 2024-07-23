@@ -53,27 +53,7 @@ os.environ['SDL_AUDIODRIVER'] = 'coreaudio'
 # 事前録音した相槌の音声ファイル
 nod_responses = ["hoo.mp3", "naruhodo.mp3", "hee.mp3"]
 
-# 応答ルールの定義
-response_rules = {
-    "endings": {
-        "です。": "そうなんですね。",
-        "だよ。": "なるほど。",
-        "ました。": "へえ、そうなんですね。",
-        "だったんですよ。": "ほー、それは興味深いですね。",
-        "ます。": "そうですね。"
-    },
-    "keywords": {
-        "困っています": "それは大変ですね。",
-        "好きです": "うんうん、私も好きです。",
-        "嫌い": "それは残念ですね。",
-        "楽しい": "それは楽しいですね。",
-        "嬉しい": "それは嬉しいですね。",
-        "悲しい": "それは悲しいですね。",
-        "辛い": "それは辛いですね。"
-    }
-}
-
-async def recognize_speech_from_mic(stop_event):
+async def recognize_speech_from_mic():
     recognizer = sr.Recognizer()
     microphone = sr.Microphone()
 
@@ -85,7 +65,6 @@ async def recognize_speech_from_mic(stop_event):
     try:
         recognized_text = await asyncio.to_thread(recognizer.recognize_google, audio, language="ja-JP")
         print(f"Recognized: {recognized_text}")  # デバッグ用ログ
-        stop_event.set()  # 音声認識が成功したらイベントを設定して音声再生を停止
         return recognized_text
     except sr.UnknownValueError:
         print("Google Speech Recognition could not understand audio")  # デバッグ用ログ
@@ -110,7 +89,7 @@ async def generate_response(prompt, past_messages=[]):
     print(f"Generated response: {response_data['responseMessage']}")  # デバッグ用ログ
     return response_data['responseMessage'], response_data['pastMessages']
 
-async def text_to_speech(text, stop_event):
+async def text_to_speech(text, display_text=False):
     print(f"Converting text to speech: {text}")  # デバッグ用ログ
     synthesis_input = texttospeech.SynthesisInput(text=text)
 
@@ -145,9 +124,6 @@ async def text_to_speech(text, stop_event):
         print("Playing audio...")  # デバッグ用ログ
 
         while pygame.mixer.music.get_busy():
-            if stop_event.is_set():
-                pygame.mixer.music.stop()
-                break
             await asyncio.sleep(0.1)
 
         print("Audio playback finished.")  # デバッグ用ログ
@@ -155,7 +131,7 @@ async def text_to_speech(text, stop_event):
     except Exception as e:
         print(f"Error during audio playback: {e}")  # デバッグ用ログ
 
-async def play_nod_response(stop_event):
+async def play_nod_response():
     nod_file = random.choice(nod_responses)
     print(f"Playing nod response: {nod_file}")  # デバッグ用ログ
     if not os.path.exists(nod_file):
@@ -167,21 +143,7 @@ async def play_nod_response(stop_event):
     pygame.mixer.music.play()
     
     while pygame.mixer.music.get_busy():
-        if stop_event.is_set():
-            pygame.mixer.music.stop()
-            break
         await asyncio.sleep(0.1)
-
-def get_aizuchi(text):
-    for ending, response in response_rules["endings"].items():
-        if text.endswith(ending):
-            return response
-    
-    for keyword, response in response_rules["keywords"].items():
-        if keyword in text:
-            return response
-    
-    return ""
 
 def save_conversation_to_csv(conversations):
     now = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -217,6 +179,7 @@ def run_js_summary_script(csv_filename):
 async def upload_csv_to_drive(local_csv_path, file_name, folder_id=None):
     try:
         print(f"Uploading {local_csv_path} to Google Drive as {file_name}")  # デバッグ用ログ
+        # 認証情報の読み込み
         scope = ['https://www.googleapis.com/auth/drive']
         credentials = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_ACCOUNT_FILE, scope)
 
@@ -225,12 +188,15 @@ async def upload_csv_to_drive(local_csv_path, file_name, folder_id=None):
 
         drive = GoogleDrive(gauth)
         
+        # 新しいファイルを作成し、CSVファイルの内容を設定
         file_metadata = {'title': file_name}
         if folder_id:
             file_metadata['parents'] = [{'id': folder_id}]
         
         file = drive.CreateFile(file_metadata)
         file.SetContentFile(local_csv_path)
+        
+        # ファイルをGoogle Driveにアップロード
         file.Upload()
         
         print(f"File '{file_name}' uploaded to Google Drive")  # デバッグ用ログ
@@ -243,18 +209,12 @@ async def main():
 
     initial_message = "こんにちは、お話しできますか？"
     print(f"Initial message: {initial_message}")  # デバッグ用ログ
-
-    stop_event = asyncio.Event()
-    await text_to_speech(initial_message, stop_event)
+    await text_to_speech(initial_message, display_text=False)
     conversations.append(("システム", initial_message))
     print("Initial message spoken.")  # デバッグ用ログ
 
     while True:
-        stop_event.clear()
-        recognize_task = asyncio.create_task(recognize_speech_from_mic(stop_event))
-        
-        speech = await recognize_task
-
+        speech = await recognize_speech_from_mic()
         if speech:
             conversations.append(("ユーザー", speech))
 
@@ -262,19 +222,14 @@ async def main():
                 print("Conversation ended by user.")  # デバッグ用ログ
                 break
 
-            # 90%の確率で相槌を挿入
-            if random.random() < 0.9:
-                aizuchi = get_aizuchi(speech)
-                if aizuchi:
-                    await play_nod_response(stop_event)
-                    stop_event.clear()
-                    await text_to_speech(aizuchi, stop_event)
+            # 70%の確率で相槌を挿入
+            if random.random() < 0.7:
+                await play_nod_response()
 
             response_task = asyncio.create_task(generate_response(speech, past_messages))
             response, past_messages = await response_task
 
-            stop_event.clear()
-            await text_to_speech(response, stop_event)
+            await text_to_speech(response, display_text=False)
             conversations.append(("AI", response))
 
     csv_file = save_conversation_to_csv(conversations)

@@ -36,4 +36,4 @@ uritemplate==4.1.1
 urllib3==2.2.2
 pyaudio==0.2.14
 setuptools==68.0.0
-openai==0.27.2  # 追加
+openai==1.37.0
