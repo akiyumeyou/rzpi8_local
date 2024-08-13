@@ -4,7 +4,6 @@ import requests
 from google.cloud import texttospeech
 from pydub import AudioSegment
 from pydub.playback import play
-import pyaudio
 
 # Google Cloud Text-to-Speech API の初期化
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/Users/satouakiko/Desktop/PY/rzpi_chat.json"
@@ -12,10 +11,6 @@ client = texttospeech.TextToSpeechClient()
 
 # ElevenLabsのAPIキーを直接指定
 ELEVENLABS_API_KEY = 'sk_83a724eba4e327d3aa828920bf57839a5b0cc3f93f5c9718'
-
-# PyAudio の初期化
-p = pyaudio.PyAudio()
-stream = None
 
 async def google_text_to_speech(text, voice_params):
     synthesis_input = texttospeech.SynthesisInput(text=text)
@@ -53,26 +48,8 @@ async def elevenlabs_text_to_speech(text, voice_id):
         return None
 
 async def play_audio(audio_content):
-    global stream
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_content), format="mp3")
-        stream = p.open(format=p.get_format_from_width(audio.sample_width),
-                        channels=audio.channels,
-                        rate=audio.frame_rate,
-                        output=True)
-        stream.start_stream()
-        stream.write(audio.raw_data)
+        play(audio)
     except Exception as e:
         print(f"Error playing audio: {e}")
-    finally:
-        if stream is not None:
-            stream.stop_stream()
-            stream.close()
-            stream = None
-
-def stop_audio():
-    global stream
-    if stream is not None:
-        stream.stop_stream()
-        stream.close()
-        stream = None

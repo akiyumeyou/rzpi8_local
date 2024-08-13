@@ -6,19 +6,9 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "rzpi_chat.json"  # ここにあ�
 client = texttospeech.TextToSpeechClient()
 
 phrases = [
-    "そうなんですね",
-    "なるほど",
-    "へーそうなんですね",
-    "ほーそれは興味深いですね",
-    "そうですね",
-    "それは大変ですね",
-    "うんうん、わたしも好きです",
-    "それは残念です",
-    "それは楽しいですね",
-    "それは嬉しいですね",
-    "それは悲しいですね",
-    "それはつらいですね",
-    "それで"
+    "今日は誰とお話ししますか"
+   
+    
 ]
 
 def generate_speech(phrase, filename):
